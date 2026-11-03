@@ -111,7 +111,7 @@ td.hot { color: var(--jump); font-weight: 600; }
 
 <details id="layers" open>
   <summary>Anomaly layers</summary>
-  <label class="lay" style="--k:#7fffd4"><input type="checkbox" id="l-trk" checked><span><b>Ship tracks</b><small id="trkNote">Large cargo, tanker and passenger ships, Jul 2026.</small></span></label>
+  <label class="lay" style="--k:#7fffd4"><input type="checkbox" id="l-trk" checked><span><b>Ship tracks</b><small id="trkNote">Large cargo, tanker and passenger ships.</small></span></label>
   <label class="lay" style="--k:#7fe3ff"><input type="checkbox" id="l-port" checked><span><b>Ports</b><small>64 major commodity ports. Click one for details.</small></span></label>
   <label class="lay" style="--k:var(--alert)"><input type="checkbox" id="l-dark"><span><b>Going dark</b><small>Where a ship went silent for 6 h to 14 days. <span class="n" id="n-dark"></span></small></span></label>
   <label class="lay" style="--k:var(--jump)"><input type="checkbox" id="l-jump"><span><b>Impossible jumps</b><small>Position changes faster than 50 knots. <span class="n" id="n-jump"></span></small></span></label>
@@ -161,7 +161,7 @@ require([
     dark: SVC + "AMSA_AIS_-_Going_dark_points/FeatureServer/0",
     jumps: SVC + "AMSA_AIS_-_Kinematics_impossible_position_jumps/FeatureServer/0",
     off: SVC + "AMSA_AIS_-_Compliance_B_off-route_excursions/FeatureServer/0",
-    tracks: SVC + "AMSA_AIS_-_Large_merchant_ship_track_lines_Jul_2026/FeatureServer/0",
+    tracks: SVC + "AMSA_AIS_-_Ship_tracks_by_month/FeatureServer/0",
     conflicts: SVC +"AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
     ports: SVC + "Australian_Major_Ports_(National_Major_Ports_-_CSIRO_AODN)/FeatureServer/0"
   };
@@ -299,7 +299,7 @@ require([
     const my = ++seq, w = wheres(), c = clsInfo();
     for (const k of Object.keys(w)) layers[k].definitionExpression = w[k];
     layers.density.renderer = cells(hex(c[2]));
-    layers.tracks.definitionExpression = and(clsWhere("tracks")); applyTracks();
+    layers.tracks.definitionExpression = and(`month = '${cur().d}'`, clsWhere("tracks")); applyTracks();
     document.documentElement.style.setProperty("--clr", c[2]);
     document.querySelectorAll("#classes button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === state.cls));
     updateClock(); updateBadge(); buildCmp();
@@ -314,11 +314,12 @@ require([
   let rt; const refreshSoon = () => { clearTimeout(rt); rt = setTimeout(refresh, 150); };
   const totals = {};
 
-  // Ship tracks exist for July 2026 only (large cargo, tanker and passenger ships), so they follow the dial.
+  // Ship tracks are built for the complete (not truncated) months only, so they follow the dial when one is available.
+  const TRACK_MONTHS = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01", "2024-07-01", "2024-10-01", "2025-02-01", "2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01"];
   function applyTracks() {
-    const on = $("l-trk").checked && cur().d === "2026-07-01";
+    const has = TRACK_MONTHS.includes(cur().d), on = $("l-trk").checked && has;
     layers.tracks.visible = on;
-    $("trkNote").textContent = $("l-trk").checked && !on ? "Tracks cover Jul 2026 only. Set the dial to 07 2026 to see them." : "Large cargo, tanker and passenger ships, Jul 2026.";
+    $("trkNote").textContent = has ? "Large cargo, tanker and passenger ships for this month." : "Tracks exist for 13 complete months. This month was truncated at the source, so only density is shown.";
   }
   function updateBadge() {
     const m = cur(), n = [];
