@@ -156,15 +156,15 @@ require([
 
   const SVC = "https://services1.arcgis.com/vHnIGBHHqDR6y0CR/arcgis/rest/services/";
   const URL = {
-    density: SVC + "AMSA_AIS_-_Traffic_density_by_vessel_type_and_month/FeatureServer/0",
+    density: SVC + "AMSA_AIS_-_Traffic_density_fine_grid_by_vessel_class_and_month/FeatureServer/0",
     dark: SVC + "AMSA_AIS_-_Going_dark_points/FeatureServer/0",
     jumps: SVC + "AMSA_AIS_-_Kinematics_impossible_position_jumps/FeatureServer/0",
     off: SVC + "AMSA_AIS_-_Compliance_B_off-route_excursions/FeatureServer/0",
     conflicts: SVC + "AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
     ports: SVC + "Australian_Major_Ports_(National_Major_Ports_-_CSIRO_AODN)/FeatureServer/0"
   };
-  const CLASSES = [["all", "All", "#19ff74"], ["cargo", "Cargo", "#19ff74"], ["fishing", "Fishing", "#ffe94d"], ["passenger", "Passenger", "#35e0ff"], ["tanker", "Tanker", "#ffb020"], ["other", "Other", "#8fb3d9"]];
-  const MAJOR = ["cargo", "tanker", "passenger", "fishing"];
+  const CLASSES = [["all", "All", "#19ff74"], ["cargo", "Cargo", "#19ff74"], ["fishing", "Fishing", "#ffe94d"], ["passenger", "Passenger", "#35e0ff"], ["pleasure", "Pleasure", "#ff5ec8"], ["tanker", "Tanker", "#ffb020"], ["tug/service", "Tug / service", "#a98bff"], ["other", "Other", "#8fb3d9"]];
+  const MAJOR = ["cargo", "tanker", "passenger", "fishing", "pleasure", "tug/service"];
   const MN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const $ = (id) => document.getElementById(id);
   const state = { mi: 0, cls: "cargo", cmpB: 0, months: [], play: null };
@@ -221,7 +221,8 @@ require([
   const rangeW = (f, d) => `${f} >= timestamp '${d} 00:00:00' AND ${f} < timestamp '${nextMonth(d)} 00:00:00'`;
   function clsWhere(key) {
     const c = state.cls; if (c === "all") return null;
-    if (key === "density" || c !== "other") return `vclass = '${c}'`;
+    if (c !== "other") return `vclass = '${c}'`;
+    if (key === "density") return `vclass = 'other'`;
     return `vclass NOT IN ('${MAJOR.join("','")}')`;
   }
   const and = (...p) => p.filter(Boolean).join(" AND ") || "1=1";
