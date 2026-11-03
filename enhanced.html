@@ -111,6 +111,7 @@ td.hot { color: var(--jump); font-weight: 600; }
 
 <details id="layers" open>
   <summary>Anomaly layers</summary>
+  <label class="lay" style="--k:#7fffd4"><input type="checkbox" id="l-trk" checked><span><b>Ship tracks</b><small id="trkNote">Large cargo, tanker and passenger ships, Jul 2026.</small></span></label>
   <label class="lay" style="--k:#7fe3ff"><input type="checkbox" id="l-port" checked><span><b>Ports</b><small>64 major commodity ports. Click one for details.</small></span></label>
   <label class="lay" style="--k:var(--alert)"><input type="checkbox" id="l-dark"><span><b>Going dark</b><small>Where a ship went silent for 6 h to 14 days. <span class="n" id="n-dark"></span></small></span></label>
   <label class="lay" style="--k:var(--jump)"><input type="checkbox" id="l-jump"><span><b>Impossible jumps</b><small>Position changes faster than 50 knots. <span class="n" id="n-jump"></span></small></span></label>
@@ -151,8 +152,8 @@ td.hot { color: var(--jump); font-weight: 600; }
 <script>
 require([
   "esri/Map", "esri/views/MapView", "esri/layers/FeatureLayer", "esri/layers/GraphicsLayer", "esri/Graphic",
-  "esri/renderers/HeatmapRenderer", "esri/renderers/SimpleRenderer", "esri/widgets/Zoom", "esri/widgets/Home", "esri/widgets/BasemapToggle"
-], function (Map, MapView, FeatureLayer, GraphicsLayer, Graphic, HeatmapRenderer, SimpleRenderer, Zoom, Home, BasemapToggle) {
+  "esri/renderers/HeatmapRenderer", "esri/renderers/SimpleRenderer", "esri/renderers/UniqueValueRenderer", "esri/widgets/Zoom", "esri/widgets/Home", "esri/widgets/BasemapToggle"
+], function (Map, MapView, FeatureLayer, GraphicsLayer, Graphic, HeatmapRenderer, SimpleRenderer, UniqueValueRenderer, Zoom, Home, BasemapToggle) {
 
   const SVC = "https://services1.arcgis.com/vHnIGBHHqDR6y0CR/arcgis/rest/services/";
   const URL = {
@@ -160,7 +161,8 @@ require([
     dark: SVC + "AMSA_AIS_-_Going_dark_points/FeatureServer/0",
     jumps: SVC + "AMSA_AIS_-_Kinematics_impossible_position_jumps/FeatureServer/0",
     off: SVC + "AMSA_AIS_-_Compliance_B_off-route_excursions/FeatureServer/0",
-    conflicts: SVC + "AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
+    tracks: SVC + "AMSA_AIS_-_Large_merchant_ship_track_lines_Jul_2026/FeatureServer/0",
+    conflicts: SVC +"AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
     ports: SVC + "Australian_Major_Ports_(National_Major_Ports_-_CSIRO_AODN)/FeatureServer/0"
   };
   const CLASSES = [["all", "All", "#19ff74"], ["cargo", "Cargo", "#19ff74"], ["fishing", "Fishing", "#ffe94d"], ["passenger", "Passenger", "#35e0ff"], ["pleasure", "Pleasure", "#ff5ec8"], ["tanker", "Tanker", "#ffb020"], ["tug/service", "Tug / service", "#a98bff"], ["other", "Other", "#8fb3d9"]];
@@ -177,6 +179,28 @@ require([
   const clsInfo = () => CLASSES.find((c) => c[0] === state.cls);
 
   // ---- renderers ----
+  // Density cells: crisp points whose size follows the map scale (never vanish when zoomed out) and whose
+  // brightness follows the position count; layers use additive blending so overlaps glow like the US atlas.
+  function cells(rgb) {
+    const [r, g, b] = rgb, lift = (f) => [Math.round(r + (255 - r) * f), Math.round(g + (255 - g) * f), Math.round(b + (255 - b) * f), 1];
+    return new SimpleRenderer({
+      symbol: { type: "simple-marker", style: "square", color: [r, g, b, 0.5], size: 6, outline: null },
+      visualVariables: [
+        { type: "size", valueExpression: "$view.scale", valueExpressionTitle: "scale",
+          stops: [{ value: 1500000, size: 50 }, { value: 6000000, size: 17 }, { value: 18000000, size: 7.5 }, { value: 40000000, size: 4 }, { value: 150000000, size: 2.2 }] },
+        { type: "color", valueExpression: "Log($feature.positions + 1)", valueExpressionTitle: "positions",
+          stops: [{ value: 3.3, color: [Math.round(r * .55), Math.round(g * .55), Math.round(b * .55), 1] }, { value: 6.5, color: [r, g, b, 1] }, { value: 10.5, color: lift(0.45) }] },
+        { type: "opacity", valueExpression: "Log($feature.positions + 1)", valueExpressionTitle: "positions",
+          stops: [{ value: 3.3, opacity: 0.18 }, { value: 6, opacity: 0.4 }, { value: 8.5, opacity: 0.65 }, { value: 10.5, opacity: 0.85 }] }
+      ]
+    });
+  }
+  const lineSym = (c, w) => ({ type: "simple-line", color: c, width: w || 1 });
+  const trackRenderer = new (UniqueValueRenderer)({
+    field: "vclass", defaultSymbol: lineSym([143, 179, 217, 0.2], 0.7),
+    uniqueValueInfos: [
+      { value: "cargo", symbol: lineSym([25, 255, 116, 0.2], 0.7) }, { value: "tanker", symbol: lineSym([255, 176, 32, 0.22], 0.7) }, { value: "passenger", symbol: lineSym([53, 224, 255, 0.25], 0.7) }]
+  });
   function heat(rgb) {
     const [r, g, b] = rgb, lift = (v, f) => Math.round(v + (255 - v) * f);
     return new HeatmapRenderer({
@@ -191,7 +215,8 @@ require([
   const row = (a, b) => ({ fieldName: a, label: b });
 
   const layers = {
-    density: new FeatureLayer({ url: URL.density, renderer: heat([25, 255, 116]), title: "Traffic density", popupEnabled: false }),
+    density: new FeatureLayer({ url: URL.density, renderer: cells([25, 255, 116]), title: "Traffic density", popupEnabled: false, blendMode: "lighter" }),
+    tracks: new FeatureLayer({ url: URL.tracks, renderer: trackRenderer, title: "Ship tracks", blendMode: "lighter", popupEnabled: false }),
     ports: new FeatureLayer({
       url: URL.ports, title: "Major ports", outFields: ["*"],
       renderer: new SimpleRenderer({ symbol: { type: "simple-marker", style: "diamond", color: [4, 18, 42, 0.9], size: 11, outline: { color: [127, 227, 255, 1], width: 1.6 } } }),
@@ -209,8 +234,10 @@ require([
       renderer: new SimpleRenderer({ symbol: dot([255, 176, 0, 0.85], 8), visualVariables: [hoursSize] }),
       popupTemplate: { title: "Off route · vessel {vessel_id}", content: "{vclass} · {length} m<br>{hours} h off route, avg {avg_speed_kn} kn<br>{start_ts} to {end_ts}" } })
   };
+  // The hosted services carry minimum scales (density 1:22.8M, dark 1:17M, ports 1:54.7M) that hide data when zoomed out.
+  Object.values(layers).forEach((l) => { l.minScale = 0; l.maxScale = 0; });
   const cmpLayer = new GraphicsLayer({ visible: false, title: "Compare" });
-  const map = new Map({ basemap: "streets-night-vector", layers: [layers.density, cmpLayer, layers.dark, layers.jumps, layers.off, layers.ports] });
+  const map = new Map({ basemap: "streets-night-vector", layers: [layers.density, layers.tracks, cmpLayer, layers.dark, layers.jumps, layers.off, layers.ports] });
   const view = new MapView({ container: "view", map, center: [134, -27], zoom: 4, constraints: { minZoom: 2 }, popup: { dockEnabled: false, collapseEnabled: false } });
   view.ui.components = ["attribution"];
   view.ui.add(new Zoom({ view }), "top-right");
@@ -271,7 +298,8 @@ require([
     if (!state.months.length) return;
     const my = ++seq, w = wheres(), c = clsInfo();
     for (const k of Object.keys(w)) layers[k].definitionExpression = w[k];
-    layers.density.renderer = heat(hex(c[2]));
+    layers.density.renderer = cells(hex(c[2]));
+    layers.tracks.definitionExpression = and(clsWhere("tracks")); applyTracks();
     document.documentElement.style.setProperty("--clr", c[2]);
     document.querySelectorAll("#classes button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === state.cls));
     updateClock(); updateBadge(); buildCmp();
@@ -286,6 +314,12 @@ require([
   let rt; const refreshSoon = () => { clearTimeout(rt); rt = setTimeout(refresh, 150); };
   const totals = {};
 
+  // Ship tracks exist for July 2026 only (large cargo, tanker and passenger ships), so they follow the dial.
+  function applyTracks() {
+    const on = $("l-trk").checked && cur().d === "2026-07-01";
+    layers.tracks.visible = on;
+    $("trkNote").textContent = $("l-trk").checked && !on ? "Tracks cover Jul 2026 only. Set the dial to 07 2026 to see them." : "Large cargo, tanker and passenger ships, Jul 2026.";
+  }
   function updateBadge() {
     const m = cur(), n = [];
     if (m.capped) n.push("AMSA's file for this month hit the 2 GiB DBF limit, so counts are partial.");
@@ -324,6 +358,7 @@ require([
     b.onclick = () => { state.cls = k; refresh(); }; $("classes").appendChild(b);
   });
   [["l-port", "ports"], ["l-dark", "dark"], ["l-jump", "jumps"], ["l-off", "off"]].forEach(([id, k]) => { $(id).onchange = (e) => { layers[k].visible = e.target.checked; }; });
+  $("l-trk").onchange = applyTracks;
   $("l-cmp").onchange = (e) => { $("cmp").classList.toggle("on", e.target.checked); buildCmp(); };
   $("cmpB").onchange = (e) => { state.cmpB = +e.target.value; buildCmp(); };
 
@@ -345,7 +380,8 @@ require([
     const r = await layers.density.queryFeatures({ where: "1=1", outFields: ["month", "capped"], returnDistinctValues: true, returnGeometry: false, orderByFields: ["month"] });
     const seen = {}; r.features.forEach((f) => { const d = ymd(f.attributes.month); seen[d] = seen[d] || f.attributes.capped === "yes"; });
     state.months = Object.keys(seen).sort().map((d) => ({ d, capped: seen[d] }));
-    state.mi = state.months.length - 1;
+    const jul = state.months.findIndex((m) => m.d === "2026-07-01");
+    state.mi = jul >= 0 ? jul : state.months.length - 1;   // start on Jul 2026, the month that has ship tracks
     $("scrub").max = state.months.length - 1;
     state.months.forEach((m, i) => { const o = document.createElement("option"); o.value = i; o.textContent = lbl(m.d) + (m.capped ? " (partial)" : ""); $("cmpB").appendChild(o); });
     state.cmpB = Math.max(0, state.months.findIndex((m) => m.d === "2024-06-01")); $("cmpB").value = state.cmpB;
