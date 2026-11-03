@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Australian Vessel Traffic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@200;300;400;600&family=Source+Sans+3:wght@300;400;600&display=swap">
+<link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/dark/main.css">
+<script src="https://js.arcgis.com/4.31/"></script>
+<style>
+/* Same night-chart look as the standalone canvas app, now on an Esri basemap with Esri zoom/home/basemap widgets. */
+:root {
+  --ocean-1: #04122a; --ocean-2: #0a2a52;
+  --ink: #dff1ff; --ink-dim: #8fb3d9; --ink-faint: #5f84ad;
+  --panel: rgba(4,18,42,.82); --panel-edge: rgba(120,170,230,.26);
+  --alert: #ff4d4d; --jump: #ff3df2; --route: #ffb000; --passenger: #35e0ff;
+  --clr: #19ff74;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; padding: 0; background: var(--ocean-1); color: var(--ink); overflow: hidden;
+  font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif; }
+#view { position: fixed; inset: 0; }
+.pad { padding-left: 16px; padding-right: 16px; }
+
+/* Esri widgets restyled to match */
+.esri-widget, .esri-widget--button { background-color: var(--panel); color: var(--ink); }
+.esri-ui-top-right { top: 14px; right: 16px; }
+.esri-ui .esri-widget--button { width: 40px; height: 40px; border: 1px solid var(--panel-edge); }
+.esri-view-width-xsmall .esri-ui .esri-widget--button { width: 36px; height: 36px; }
+.esri-popup__main-container { background: rgba(4,18,42,.96); border: 1px solid var(--panel-edge); }
+.esri-attribution { background: rgba(4,18,42,.7); color: var(--ink-faint); }
+
+#title { position: fixed; left: 0; bottom: 36px; width: min(34vw, 360px); z-index: 3; pointer-events: none; }
+#title h1 { margin: 0 0 8px; font: 300 1.7rem/1.1 Montserrat, sans-serif; letter-spacing: .08em; text-transform: uppercase; border-top: 1px solid var(--panel-edge); padding-top: 14px; text-shadow: 0 0 8px #04122a; }
+#title p { margin: 0; font-size: .86rem; line-height: 1.45; color: var(--ink-dim); max-width: 34ch; text-shadow: 0 0 6px #04122a; }
+
+#clock { position: fixed; left: 50%; transform: translateX(-50%); bottom: 34px; display: flex; align-items: center; gap: 22px; user-select: none; z-index: 4; }
+.dial { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.num { font: 200 clamp(3rem, 8vw, 5.6rem)/1 Montserrat, sans-serif; letter-spacing: .02em; color: var(--clr); text-shadow: 0 0 22px color-mix(in srgb, var(--clr) 55%, transparent), 0 0 4px #04122a; font-variant-numeric: tabular-nums; }
+.tri { border: 0; background: none; padding: 6px 10px; cursor: pointer; color: var(--ink-dim); display: flex; flex-direction: column; align-items: center; gap: 2px; font: 400 .8rem Montserrat, sans-serif; }
+.tri svg { width: 38px; height: 22px; fill: #6f93bb; transition: fill .15s; }
+.tri:hover svg, .tri:focus-visible svg { fill: var(--clr); }
+.tri:focus-visible { outline: 1px solid var(--ink-dim); outline-offset: 2px; }
+#play { align-self: center; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--panel-edge); background: var(--panel); color: var(--ink); cursor: pointer; font-size: 1rem; }
+#play[aria-pressed="true"] { border-color: var(--clr); color: var(--clr); }
+#scrub { position: fixed; left: 50%; transform: translateX(-50%); bottom: 10px; width: min(420px, 60vw); accent-color: var(--clr); z-index: 4; }
+
+#classes { position: fixed; right: 0; bottom: 70px; display: flex; flex-direction: column; gap: 4px; border-left: 1px solid var(--panel-edge); padding-left: 18px; margin-right: 24px; z-index: 4; }
+#classes button { background: none; border: 0; text-align: left; cursor: pointer; font: 300 1.25rem/1.25 Montserrat, sans-serif; letter-spacing: .02em; text-transform: uppercase; color: var(--ink-dim); padding: 2px 0; position: relative; text-shadow: 0 0 6px #04122a; }
+#classes button:hover { color: var(--ink); }
+#classes button[aria-pressed="true"] { color: var(--c); text-shadow: 0 0 14px color-mix(in srgb, var(--c) 60%, transparent); }
+#classes button[aria-pressed="true"]::before { content: ""; position: absolute; left: -26px; top: .55em; width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c); }
+
+#layers { position: fixed; top: 14px; left: 0; width: 300px; z-index: 5; background: var(--panel); border: 1px solid var(--panel-edge); border-left: 0; backdrop-filter: blur(6px); border-radius: 0 6px 6px 0; }
+#layers summary { cursor: pointer; padding: 12px 16px; font: 400 .78rem Montserrat, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); list-style: none; }
+#layers summary::-webkit-details-marker { display: none; }
+#layers[open] summary { border-bottom: 1px solid var(--panel-edge); }
+.lay { display: grid; grid-template-columns: 18px 1fr; column-gap: 10px; padding: 9px 16px; align-items: start; cursor: pointer; }
+.lay input { margin: 3px 0 0; accent-color: var(--k); width: 16px; height: 16px; }
+.lay b { font-weight: 600; font-size: .95rem; color: var(--k); }
+.lay small { display: block; color: var(--ink-dim); font-size: .8rem; line-height: 1.35; }
+.lay .n { font-variant-numeric: tabular-nums; color: var(--ink); }
+#cmp { display: none; padding: 4px 16px 12px 44px; }
+#cmp.on { display: block; }
+#cmp label { font-size: .78rem; color: var(--ink-dim); display: block; margin-bottom: 4px; }
+#cmp select { width: 100%; background: rgba(4,18,42,.9); color: var(--ink); border: 1px solid var(--panel-edge); border-radius: 4px; padding: 6px 8px; font: inherit; }
+#cmp .key { display: flex; gap: 12px; margin-top: 8px; font-size: .78rem; color: var(--ink-dim); }
+#cmp .key i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+
+/* "This month" cards, larger than before, top right beside the Esri widgets */
+#tint { position: fixed; inset: 0; background: #0a3c80; mix-blend-mode: soft-light; opacity: .75; pointer-events: none; z-index: 1; }
+#month { position: fixed; top: 14px; right: 130px; width: 380px; z-index: 5; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px; backdrop-filter: blur(6px); padding: 14px 16px 16px; }
+#month h2 { margin: 0 0 10px; font: 400 .8rem Montserrat, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
+#month .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#month .card { border: 1px solid var(--panel-edge); border-radius: 8px; padding: 12px 14px; background: rgba(10,42,82,.35); }
+#month .card b { display: block; font: 300 2.15rem/1.05 Montserrat, sans-serif; font-variant-numeric: tabular-nums; color: var(--ink); }
+#month .card span { display: block; margin-top: 4px; font-size: .95rem; color: var(--ink-dim); }
+#month .card.p b { color: var(--clr); } #month .card.d b { color: var(--alert); } #month .card.j b { color: var(--jump); } #month .card.o b { color: var(--route); }
+
+#badge { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); max-width: min(380px, 30vw); text-align: center; background: rgba(60,30,0,.88); border: 1px solid #b8791c; color: #ffd28a; padding: 6px 12px; border-radius: 4px; font-size: .8rem; line-height: 1.35; z-index: 6; }
+#badge[hidden] { display: none; }
+
+#drawer { position: fixed; left: 0; right: 0; bottom: 0; transform: translateY(100%); transition: transform .25s ease; background: rgba(4,18,42,.96); border-top: 1px solid var(--panel-edge); max-height: 52vh; display: flex; flex-direction: column; z-index: 7; }
+#drawer.open { transform: translateY(0); }
+#tab { position: absolute; right: 24px; top: -34px; height: 34px; background: rgba(4,18,42,.96); border: 1px solid var(--panel-edge); border-bottom: 0; color: var(--ink-dim); padding: 0 14px; border-radius: 6px 6px 0 0; cursor: pointer; font: 400 .74rem Montserrat, sans-serif; letter-spacing: .14em; text-transform: uppercase; }
+#tab:hover { color: var(--ink); }
+#drawer .head { padding-top: 14px; padding-bottom: 8px; color: var(--ink-dim); font-size: .85rem; max-width: 80ch; }
+#drawer .wrap { overflow: auto; padding-bottom: 16px; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: .86rem; }
+th, td { text-align: right; padding: 5px 12px; border-bottom: 1px solid rgba(120,170,230,.12); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { position: sticky; top: 0; background: #07203f; font: 600 .72rem Montserrat, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
+td.hot { color: var(--jump); font-weight: 600; }
+
+@media (max-width: 900px) {
+  #title { display: none; }
+  #month { right: 120px; width: min(330px, calc(100vw - 140px)); top: 64px; } #month .card b { font-size: 1.6rem; }
+  #layers { width: 250px; } #badge { top: auto; bottom: 150px; max-width: 86vw; }
+  #classes { flex-direction: row; flex-wrap: wrap; left: 0; right: 0; bottom: 120px; margin: 0; border-left: 0; padding: 0 16px; gap: 2px 14px; }
+  #classes button { font-size: .8rem; } #classes button::before { display: none; }
+  #clock { gap: 8px; bottom: 30px; } .num { font-size: 2.6rem; } .tri svg { width: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { #drawer { transition: none; } }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="tint"></div>
+
+<details id="layers" open>
+  <summary>Anomaly layers</summary>
+  <label class="lay" style="--k:#7fe3ff"><input type="checkbox" id="l-port" checked><span><b>Ports</b><small>64 major commodity ports. Click one for details.</small></span></label>
+  <label class="lay" style="--k:var(--alert)"><input type="checkbox" id="l-dark"><span><b>Going dark</b><small>Where a ship went silent for 6 h to 14 days. <span class="n" id="n-dark"></span></small></span></label>
+  <label class="lay" style="--k:var(--jump)"><input type="checkbox" id="l-jump"><span><b>Impossible jumps</b><small>Position changes faster than 50 knots. <span class="n" id="n-jump"></span></small></span></label>
+  <label class="lay" style="--k:var(--route)"><input type="checkbox" id="l-off"><span><b>Off route</b><small>Large ships away from 2024 routes. <span class="n" id="n-off"></span></small></span></label>
+  <label class="lay" style="--k:var(--passenger)"><input type="checkbox" id="l-cmp"><span><b>Compare two months</b><small>Red: more reports than the other month. Blue: fewer.</small></span></label>
+  <div id="cmp"><label for="cmpB">Compare the month on the dial with</label><select id="cmpB"></select>
+    <div class="key"><span><i style="background:#ff5a4d"></i>more</span><span><i style="background:#4da3ff"></i>fewer</span></div>
+    <small id="cmpNote" style="display:block;margin-top:6px;color:var(--ink-dim);font-size:.76rem;line-height:1.35"></small></div>
+</details>
+
+<div id="month">
+  <h2>This month</h2>
+  <div class="grid">
+    <div class="card p"><b id="k_pos">&ndash;</b><span>AIS positions</span></div>
+    <div class="card d"><b id="k_dark">&ndash;</b><span>Went dark</span></div>
+    <div class="card j"><b id="k_jump">&ndash;</b><span>Impossible jumps</span></div>
+    <div class="card o"><b id="k_off">&ndash;</b><span>Off-route</span></div>
+  </div>
+</div>
+
+<div id="badge" hidden></div>
+
+<div id="title" class="pad"><h1>Australian<br>Vessel Traffic</h1><p>AIS positions reported to AMSA, live from ArcGIS Online layers. Brighter means more reports in a cell. Ports: National Major Ports, AODN (CSIRO BECRC), CC BY 4.0.</p></div>
+
+<div id="clock">
+  <div class="dial"><button class="tri" id="mUp" aria-label="Next month"><span id="mUpN">&nbsp;</span><svg viewBox="0 0 38 22"><path d="M19 2 36 20H2z"/></svg></button><div class="num" id="mNum">--</div><button class="tri" id="mDn" aria-label="Previous month"><svg viewBox="0 0 38 22"><path d="M19 20 2 2h34z"/></svg><span id="mDnN">&nbsp;</span></button></div>
+  <button id="play" aria-pressed="false" aria-label="Play months">&#9654;</button>
+  <div class="dial"><button class="tri" id="yUp" aria-label="Next year"><span id="yUpN">&nbsp;</span><svg viewBox="0 0 38 22"><path d="M19 2 36 20H2z"/></svg></button><div class="num" id="yNum">----</div><button class="tri" id="yDn" aria-label="Previous year"><svg viewBox="0 0 38 22"><path d="M19 20 2 2h34z"/></svg><span id="yDnN">&nbsp;</span></button></div>
+</div>
+<input type="range" id="scrub" min="0" value="0" aria-label="Month">
+
+<nav id="classes" aria-label="Vessel class"></nav>
+
+<div id="drawer"><button id="tab" aria-expanded="false">Shared identifiers &#9650;</button>
+  <div class="head pad">One AIS identifier used by many different transmitters. The top 100 of 300 by impossible jumps. These rows are why some per-vessel results were excluded.</div>
+  <div class="wrap pad"><table><thead><tr><th>Vessel ID</th><th>Jumps</th><th>Max knots</th><th>Vessel classes</th><th>Positions</th><th>Months seen</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+
+<script>
+require([
+  "esri/Map", "esri/views/MapView", "esri/layers/FeatureLayer", "esri/layers/GraphicsLayer", "esri/Graphic",
+  "esri/renderers/HeatmapRenderer", "esri/renderers/SimpleRenderer", "esri/widgets/Zoom", "esri/widgets/Home", "esri/widgets/BasemapToggle"
+], function (Map, MapView, FeatureLayer, GraphicsLayer, Graphic, HeatmapRenderer, SimpleRenderer, Zoom, Home, BasemapToggle) {
+
+  const SVC = "https://services1.arcgis.com/vHnIGBHHqDR6y0CR/arcgis/rest/services/";
+  const URL = {
+    density: SVC + "AMSA_AIS_-_Traffic_density_by_vessel_type_and_month/FeatureServer/0",
+    dark: SVC + "AMSA_AIS_-_Going_dark_points/FeatureServer/0",
+    jumps: SVC + "AMSA_AIS_-_Kinematics_impossible_position_jumps/FeatureServer/0",
+    off: SVC + "AMSA_AIS_-_Compliance_B_off-route_excursions/FeatureServer/0",
+    conflicts: SVC + "AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
+    ports: SVC + "Australian_Major_Ports_(National_Major_Ports_-_CSIRO_AODN)/FeatureServer/0"
+  };
+  const CLASSES = [["all", "All", "#19ff74"], ["cargo", "Cargo", "#19ff74"], ["fishing", "Fishing", "#ffe94d"], ["passenger", "Passenger", "#35e0ff"], ["tanker", "Tanker", "#ffb020"], ["other", "Other", "#8fb3d9"]];
+  const MAJOR = ["cargo", "tanker", "passenger", "fishing"];
+  const MN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const $ = (id) => document.getElementById(id);
+  const state = { mi: 0, cls: "cargo", cmpB: 0, months: [], play: null };
+  const fmt = (n) => (n == null ? "–" : Math.round(n).toLocaleString());
+  const ymd = (v) => (typeof v === "number" ? new Date(v).toISOString().slice(0, 10) : String(v).slice(0, 10));
+  const nextMonth = (d) => { const y = +d.slice(0, 4), m = +d.slice(5, 7); return (m === 12 ? (y + 1) + "-01" : y + "-" + String(m + 1).padStart(2, "0")) + "-01"; };
+  const lbl = (d) => MN[+d.slice(5, 7) - 1] + " " + d.slice(0, 4);
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const cur = () => state.months[state.mi];
+  const clsInfo = () => CLASSES.find((c) => c[0] === state.cls);
+
+  // ---- renderers ----
+  function heat(rgb) {
+    const [r, g, b] = rgb, lift = (v, f) => Math.round(v + (255 - v) * f);
+    return new HeatmapRenderer({
+      valueExpression: "Log($feature.positions + 1)", radius: 10, referenceScale: 36000000, minDensity: 0, maxDensity: 0.22,
+      colorStops: [
+        { ratio: 0, color: [r, g, b, 0] }, { ratio: 0.05, color: [r, g, b, 0.3] }, { ratio: 0.2, color: [r, g, b, 0.6] },
+        { ratio: 0.5, color: [r, g, b, 0.9] }, { ratio: 0.8, color: [lift(r, .5), lift(g, .5), lift(b, .5), 0.97] }, { ratio: 1, color: [255, 255, 255, 1] }]
+    });
+  }
+  const dot = (c, s) => ({ type: "simple-marker", style: "circle", color: c, size: s, outline: { color: [4, 18, 42, 0.8], width: 0.6 } });
+  const hoursSize = { type: "size", field: "hours", stops: [{ value: 6, size: 7 }, { value: 48, size: 12 }, { value: 240, size: 19 }] };
+  const row = (a, b) => ({ fieldName: a, label: b });
+
+  const layers = {
+    density: new FeatureLayer({ url: URL.density, renderer: heat([25, 255, 116]), title: "Traffic density", popupEnabled: false }),
+    ports: new FeatureLayer({
+      url: URL.ports, title: "Major ports", outFields: ["*"],
+      renderer: new SimpleRenderer({ symbol: { type: "simple-marker", style: "diamond", color: [4, 18, 42, 0.9], size: 11, outline: { color: [127, 227, 255, 1], width: 1.6 } } }),
+      labelingInfo: [{ labelExpressionInfo: { expression: "$feature.name" }, labelPlacement: "above-center", minScale: 9000000,
+        symbol: { type: "text", color: "#bfeaff", haloColor: [4, 18, 42, 0.95], haloSize: 1.5, font: { size: 10, family: "Source Sans 3" } } }],
+      popupTemplate: { title: "{name}", content: "{state} · {port_class}<br>Proclaimed: {proclaimed}<br><i>National Major Ports, AODN / CSIRO BECRC (CC BY 4.0)</i>" }
+    }),
+    dark: new FeatureLayer({ url: URL.dark, visible: false, title: "Going dark", outFields: ["*"],
+      renderer: new SimpleRenderer({ symbol: dot([255, 77, 77, 0.85], 8), visualVariables: [hoursSize] }),
+      popupTemplate: { title: "Went dark · vessel {vessel_id}", content: "{vclass} · {length_m} m<br>Silent {hours} h, {distance_nm} nm between fixes<br>Last seen {gap_start}<br>Reappeared {gap_end} at {reappear_lon}, {reappear_lat}<br>Speed before: {speed_before_kn} kn" } }),
+    jumps: new FeatureLayer({ url: URL.jumps, visible: false, title: "Impossible jumps", outFields: ["*"],
+      renderer: new SimpleRenderer({ symbol: dot([255, 61, 242, 0.85], 8) }),
+      popupTemplate: { title: "Impossible jump · vessel {vessel_id}", content: "{distance_nm} nm in {minutes} min = {implied_knots} kn<br>{shared_id}<br>From {prev_lon}, {prev_lat} at {prev_time}<br>To {lon}, {lat} at {time}" } }),
+    off: new FeatureLayer({ url: URL.off, visible: false, title: "Off route", outFields: ["*"],
+      renderer: new SimpleRenderer({ symbol: dot([255, 176, 0, 0.85], 8), visualVariables: [hoursSize] }),
+      popupTemplate: { title: "Off route · vessel {vessel_id}", content: "{vclass} · {length} m<br>{hours} h off route, avg {avg_speed_kn} kn<br>{start_ts} to {end_ts}" } })
+  };
+  const cmpLayer = new GraphicsLayer({ visible: false, title: "Compare" });
+  const map = new Map({ basemap: "streets-night-vector", layers: [layers.density, cmpLayer, layers.dark, layers.jumps, layers.off, layers.ports] });
+  const view = new MapView({ container: "view", map, center: [134, -27], zoom: 4, constraints: { minZoom: 2 }, popup: { dockEnabled: false, collapseEnabled: false } });
+  view.ui.components = ["attribution"];
+  view.ui.add(new Zoom({ view }), "top-right");
+  view.ui.add(new Home({ view }), "top-right");
+  view.ui.add(new BasemapToggle({ view, nextBasemap: "satellite" }), "top-right");
+
+  // ---- filters ----
+  const rangeW = (f, d) => `${f} >= timestamp '${d} 00:00:00' AND ${f} < timestamp '${nextMonth(d)} 00:00:00'`;
+  function clsWhere(key) {
+    const c = state.cls; if (c === "all") return null;
+    if (key === "density" || c !== "other") return `vclass = '${c}'`;
+    return `vclass NOT IN ('${MAJOR.join("','")}')`;
+  }
+  const and = (...p) => p.filter(Boolean).join(" AND ") || "1=1";
+  function wheres() {
+    const d = cur().d;
+    return { density: and(`month = '${d}'`, clsWhere("density")), dark: and(rangeW("gap_start", d), clsWhere("dark")),
+      jumps: and(rangeW("time", d), clsWhere("jumps")), off: and(rangeW("start_ts", d), clsWhere("off")) };
+  }
+
+  // ---- compare two months (client side, cell by cell) ----
+  async function monthCells(d) {
+    const where = and(`month = '${d}'`, clsWhere("density")), cells = {}; let start = 0;
+    for (;;) {
+      const r = await layers.density.queryFeatures({ where, outFields: ["lon", "lat", "positions"], returnGeometry: false, start, num: 2000, orderByFields: ["ObjectId"] });
+      r.features.forEach((f) => { const a = f.attributes, k = a.lon + "," + a.lat; cells[k] = (cells[k] || 0) + a.positions; });
+      if (!r.exceededTransferLimit) break; start += 2000;
+    }
+    return cells;
+  }
+  let cseq = 0;
+  async function buildCmp() {
+    const on = $("l-cmp").checked; cmpLayer.visible = on; layers.density.opacity = on ? 0.3 : 1;
+    if (!on) return;
+    const my = ++cseq, A = cur().d, B = state.months[state.cmpB].d;
+    const [a, b] = await Promise.all([monthCells(A), monthCells(B)]);
+    if (my !== cseq) return;
+    const gs = []; new Set([...Object.keys(a), ...Object.keys(b)]).forEach((k) => {
+      const x = a[k] || 0, y = b[k] || 0, tot = x + y; if (tot < 60) return;
+      const lr = Math.log((x + 1) / (y + 1)); if (Math.abs(lr) < 0.45) return;
+      const [lon, lat] = k.split(",").map(Number), s = Math.min(22, 7 + Math.log10(tot) * 2.6);
+      gs.push(new Graphic({ geometry: { type: "point", longitude: lon, latitude: lat },
+        symbol: dot(lr > 0 ? [255, 90, 77, 0.78] : [77, 163, 255, 0.78], s),
+        attributes: { now: Math.round(x), then: Math.round(y) },
+        popupTemplate: { title: "Reports: " + lbl(A) + " vs " + lbl(B), content: lbl(A) + ": {now}<br>" + lbl(B) + ": {then}" } }));
+    });
+    cmpLayer.removeAll(); cmpLayer.addMany(gs);
+    const notes = [];
+    if (cur().capped || state.months[state.cmpB].capped) notes.push("One of these months is a partial AMSA file, so cell totals are biased low.");
+    if ((A >= "2026-06-01") !== (B >= "2026-06-01")) notes.push("From Jun 2026 AMSA's footprint changed (Coral Sea east of 158E is empty), so differences at the edges are not real change.");
+    $("cmpNote").textContent = notes.join(" ");
+  }
+
+  // ---- refresh ----
+  let seq = 0;
+  async function refresh() {
+    if (!state.months.length) return;
+    const my = ++seq, w = wheres(), c = clsInfo();
+    for (const k of Object.keys(w)) layers[k].definitionExpression = w[k];
+    layers.density.renderer = heat(hex(c[2]));
+    document.documentElement.style.setProperty("--clr", c[2]);
+    document.querySelectorAll("#classes button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === state.cls));
+    updateClock(); updateBadge(); buildCmp();
+    const cnt = (k) => layers[k].queryFeatureCount({ where: w[k] }).catch(() => null);
+    const pos = layers.density.queryFeatures({ where: w.density, outStatistics: [{ statisticType: "sum", onStatisticField: "positions", outStatisticFieldName: "s" }] })
+      .then((r) => (r.features[0] ? r.features[0].attributes.s : null)).catch(() => null);
+    const [p, dk, jp, of] = await Promise.all([pos, cnt("dark"), cnt("jumps"), cnt("off")]);
+    if (my !== seq) return;
+    $("k_pos").textContent = fmt(p); $("k_dark").textContent = fmt(dk); $("k_jump").textContent = fmt(jp); $("k_off").textContent = fmt(of);
+    ["dark", "jump", "off"].forEach((k, i) => { $("n-" + k).textContent = totals[k] == null ? "" : fmt(totals[k]) + " total, " + fmt([dk, jp, of][i]) + " this month"; });
+  }
+  let rt; const refreshSoon = () => { clearTimeout(rt); rt = setTimeout(refresh, 150); };
+  const totals = {};
+
+  function updateBadge() {
+    const m = cur(), n = [];
+    if (m.capped) n.push("AMSA's file for this month hit the 2 GiB DBF limit, so counts are partial.");
+    if (m.d >= "2026-06-01") n.push("Since Jun 2026 AMSA's footprint changed (Coral Sea east of 158E is empty).");
+    $("badge").textContent = n.join(" "); $("badge").hidden = !n.length;
+  }
+
+  // ---- clock ----
+  const pad = (n) => String(n).padStart(2, "0");
+  function updateClock() {
+    const d = cur().d, y = +d.slice(0, 4), mo = +d.slice(5, 7);
+    $("mNum").textContent = pad(mo); $("yNum").textContent = y;
+    $("mUpN").textContent = (mo % 12) + 1; $("mDnN").textContent = ((mo + 10) % 12) + 1;
+    $("yUpN").textContent = String(y + 1).slice(2); $("yDnN").textContent = String(y - 1).slice(2);
+    $("scrub").value = state.mi;
+  }
+  const go = (i) => { state.mi = Math.max(0, Math.min(state.months.length - 1, i)); refresh(); };
+  function goYear(dy) {
+    const d = cur().d, t = (+d.slice(0, 4) + dy) * 12 + (+d.slice(5, 7) - 1);
+    let best = -1, bd = 1e9;
+    state.months.forEach((m, i) => { const v = +m.d.slice(0, 4) * 12 + (+m.d.slice(5, 7) - 1); if (Math.floor(v / 12) === Math.floor(t / 12) && Math.abs(v - t) < bd) { bd = Math.abs(v - t); best = i; } });
+    if (best >= 0) go(best);
+  }
+  $("mUp").onclick = () => go(state.mi + 1); $("mDn").onclick = () => go(state.mi - 1);
+  $("yUp").onclick = () => goYear(1); $("yDn").onclick = () => goYear(-1);
+  $("scrub").oninput = (e) => { state.mi = +e.target.value; refreshSoon(); updateClock(); };
+  $("play").onclick = () => {
+    if (state.play) { clearInterval(state.play); state.play = null; $("play").setAttribute("aria-pressed", "false"); $("play").innerHTML = "&#9654;"; return; }
+    $("play").setAttribute("aria-pressed", "true"); $("play").innerHTML = "&#10074;&#10074;";
+    state.play = setInterval(() => go((state.mi + 1) % state.months.length), 1500);
+  };
+
+  // ---- controls ----
+  CLASSES.forEach(([k, name, col]) => {
+    const b = document.createElement("button"); b.textContent = name; b.dataset.c = k; b.style.setProperty("--c", col);
+    b.onclick = () => { state.cls = k; refresh(); }; $("classes").appendChild(b);
+  });
+  [["l-port", "ports"], ["l-dark", "dark"], ["l-jump", "jumps"], ["l-off", "off"]].forEach(([id, k]) => { $(id).onchange = (e) => { layers[k].visible = e.target.checked; }; });
+  $("l-cmp").onchange = (e) => { $("cmp").classList.toggle("on", e.target.checked); buildCmp(); };
+  $("cmpB").onchange = (e) => { state.cmpB = +e.target.value; buildCmp(); };
+
+  // ---- shared identifiers drawer ----
+  let loaded = false;
+  $("tab").onclick = async () => {
+    const open = $("drawer").classList.toggle("open"); $("tab").setAttribute("aria-expanded", open);
+    if (!open || loaded) return; loaded = true;
+    const fl = new FeatureLayer({ url: URL.conflicts });
+    try {
+      const r = await fl.queryFeatures({ where: "1=1", outFields: ["vessel_id", "jumps", "max_kn", "n_classes", "positions", "months_seen"], orderByFields: ["jumps DESC"], num: 100, returnGeometry: false });
+      $("tb").innerHTML = r.features.map((f) => { const a = f.attributes;
+        return `<tr><td>${a.vessel_id}</td><td class="hot">${fmt(a.jumps)}</td><td>${fmt(a.max_kn)}</td><td>${a.n_classes}</td><td>${fmt(a.positions)}</td><td>${a.months_seen}</td></tr>`; }).join("");
+    } catch (e) { loaded = false; $("tb").innerHTML = "<tr><td colspan=6>Could not load: " + e.message + "</td></tr>"; }
+  };
+
+  // ---- start ----
+  (async function init() {
+    const r = await layers.density.queryFeatures({ where: "1=1", outFields: ["month", "capped"], returnDistinctValues: true, returnGeometry: false, orderByFields: ["month"] });
+    const seen = {}; r.features.forEach((f) => { const d = ymd(f.attributes.month); seen[d] = seen[d] || f.attributes.capped === "yes"; });
+    state.months = Object.keys(seen).sort().map((d) => ({ d, capped: seen[d] }));
+    state.mi = state.months.length - 1;
+    $("scrub").max = state.months.length - 1;
+    state.months.forEach((m, i) => { const o = document.createElement("option"); o.value = i; o.textContent = lbl(m.d) + (m.capped ? " (partial)" : ""); $("cmpB").appendChild(o); });
+    state.cmpB = Math.max(0, state.months.findIndex((m) => m.d === "2024-06-01")); $("cmpB").value = state.cmpB;
+    ["dark", "jumps", "off"].forEach((k) => layers[k].queryFeatureCount({ where: "1=1" }).then((n) => { totals[k === "jumps" ? "jump" : k] = n; refresh(); }));
+    refresh();
+  })().catch((e) => { document.body.insertAdjacentHTML("beforeend", "<div id=badge>Could not read the data layers: " + e.message + "</div>"); });
+  window._app = { view, layers, state };
+});
+</script>
+</body>
+</html>
