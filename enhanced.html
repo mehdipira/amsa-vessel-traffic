@@ -161,10 +161,10 @@ require([
     dark: SVC + "AMSA_AIS_-_Going_dark_points/FeatureServer/0",
     jumps: SVC + "AMSA_AIS_-_Kinematics_impossible_position_jumps/FeatureServer/0",
     off: SVC + "AMSA_AIS_-_Compliance_B_off-route_excursions/FeatureServer/0",
-    tracks: SVC + "AMSA_AIS_-_Ship_tracks_hourly_-_Cargo_tanker_passenger/FeatureServer/0",
-    tracksFish: SVC + "AMSA_AIS_-_Ship_tracks_hourly_-_Fishing_and_other/FeatureServer/0",
-    tracksTug: SVC + "AMSA_AIS_-_Ship_tracks_hourly_-_Tug_and_service/FeatureServer/0",
-    tracksPleasure: SVC + "AMSA_AIS_-_Ship_tracks_hourly_-_Pleasure_craft/FeatureServer/0",
+    tracks: SVC + "AMSA_AIS_-_Ship_tracks_all_months_-_Cargo_tanker_passenger/FeatureServer/0",
+    tracksFish: SVC + "AMSA_AIS_-_Ship_tracks_all_months_-_Fishing_and_other/FeatureServer/0",
+    tracksTug: SVC + "AMSA_AIS_-_Ship_tracks_all_months_-_Tug_and_service/FeatureServer/0",
+    tracksPleasure: SVC + "AMSA_AIS_-_Ship_tracks_all_months_-_Pleasure_craft/FeatureServer/0",
     conflicts: SVC +"AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
     ports: SVC + "Australian_Major_Ports_(National_Major_Ports_-_CSIRO_AODN)/FeatureServer/0"
   };
@@ -323,17 +323,17 @@ require([
   const totals = {};
 
   // Ship tracks are built for the complete (not truncated) months only, so they follow the dial when one is available.
-  const TRACK_MONTHS = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01", "2024-07-01", "2024-10-01", "2025-02-01", "2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01"];
+  // Tracks exist for every month. Where AMSA's file hit the 2 GiB limit they still cover the whole month, but with fewer reports.
   // One track layer per size limit of the upload; each holds a fixed set of classes.
   const TRACK_LAYERS = [["tracks", ["cargo", "tanker", "passenger"]], ["tracksFish", ["fishing", "other"]], ["tracksTug", ["tug/service"]], ["tracksPleasure", ["pleasure"]]];
   function applyTracks() {
-    const d = cur().d, has = TRACK_MONTHS.includes(d), c = state.cls, show = $("l-trk").checked && has;
+    const d = cur().d, c = state.cls, show = $("l-trk").checked;
     TRACK_LAYERS.forEach(([k, cls]) => {
       const mine = c === "all" ? cls : cls.filter((x) => x === c), L = layers[k];
       L.visible = show && mine.length > 0;
       if (mine.length) L.definitionExpression = `month = '${d}'` + (c === "all" ? "" : ` AND vclass IN ('${mine.join("','")}')`);
     });
-    $("trkNote").textContent = has ? "Tracks of every vessel class for this month. Large ships are 80 m and over." : "Tracks exist for 13 complete months. This month was truncated at the source, so only density is shown.";
+    $("trkNote").textContent = "Tracks of every vessel class for this month. Large ships are 80 m and over." + (cur().capped ? " AMSA's file for this month was cut at 2 GiB, so there are fewer reports." : "");
   }
   function updateBadge() {
     const m = cur(), n = [];
