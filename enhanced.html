@@ -111,7 +111,7 @@ td.hot { color: var(--jump); font-weight: 600; }
 
 <details id="layers" open>
   <summary>Anomaly layers</summary>
-  <label class="lay" style="--k:#7fffd4"><input type="checkbox" id="l-trk" checked><span><b>Ship tracks</b><small id="trkNote">Large cargo, tanker and passenger ships.</small></span></label>
+  <label class="lay" style="--k:#7fffd4"><input type="checkbox" id="l-trk" checked><span><b>Ship tracks</b><small id="trkNote">Tracks of every vessel class.</small></span></label>
   <label class="lay" style="--k:#7fe3ff"><input type="checkbox" id="l-port" checked><span><b>Ports</b><small>64 major commodity ports. Click one for details.</small></span></label>
   <label class="lay" style="--k:var(--alert)"><input type="checkbox" id="l-dark"><span><b>Going dark</b><small>Where a ship went silent for 6 h to 14 days. <span class="n" id="n-dark"></span></small></span></label>
   <label class="lay" style="--k:var(--jump)"><input type="checkbox" id="l-jump"><span><b>Impossible jumps</b><small>Position changes faster than 50 knots. <span class="n" id="n-jump"></span></small></span></label>
@@ -162,6 +162,9 @@ require([
     jumps: SVC + "AMSA_AIS_-_Kinematics_impossible_position_jumps/FeatureServer/0",
     off: SVC + "AMSA_AIS_-_Compliance_B_off-route_excursions/FeatureServer/0",
     tracks: SVC + "AMSA_AIS_-_Ship_tracks_by_month/FeatureServer/0",
+    tracksFish: SVC + "AMSA_AIS_-_Ship_tracks_by_month_-_Fishing_and_other/FeatureServer/0",
+    tracksTug: SVC + "AMSA_AIS_-_Ship_tracks_by_month_-_Tug_and_service/FeatureServer/0",
+    tracksPleasure: SVC + "AMSA_AIS_-_Ship_tracks_by_month_-_Pleasure_craft/FeatureServer/0",
     conflicts: SVC +"AMSA_AIS_-_Shared_identifiers_(identity_conflicts)/FeatureServer/0",
     ports: SVC + "Australian_Major_Ports_(National_Major_Ports_-_CSIRO_AODN)/FeatureServer/0"
   };
@@ -199,7 +202,9 @@ require([
   const trackRenderer = new (UniqueValueRenderer)({
     field: "vclass", defaultSymbol: lineSym([143, 179, 217, 0.2], 0.7),
     uniqueValueInfos: [
-      { value: "cargo", symbol: lineSym([25, 255, 116, 0.2], 0.7) }, { value: "tanker", symbol: lineSym([255, 176, 32, 0.22], 0.7) }, { value: "passenger", symbol: lineSym([53, 224, 255, 0.25], 0.7) }]
+      { value: "cargo", symbol: lineSym([25, 255, 116, 0.2], 0.7) }, { value: "tanker", symbol: lineSym([255, 176, 32, 0.22], 0.7) }, { value: "passenger", symbol: lineSym([53, 224, 255, 0.25], 0.7) },
+      { value: "fishing", symbol: lineSym([255, 233, 77, 0.3], 0.7) }, { value: "pleasure", symbol: lineSym([255, 94, 200, 0.16], 0.6) },
+      { value: "tug/service", symbol: lineSym([169, 139, 255, 0.3], 0.7) }, { value: "other", symbol: lineSym([143, 179, 217, 0.3], 0.7) }]
   });
   function heat(rgb) {
     const [r, g, b] = rgb, lift = (v, f) => Math.round(v + (255 - v) * f);
@@ -217,6 +222,9 @@ require([
   const layers = {
     density: new FeatureLayer({ url: URL.density, renderer: cells([25, 255, 116]), title: "Traffic density", popupEnabled: false, blendMode: "lighter" }),
     tracks: new FeatureLayer({ url: URL.tracks, renderer: trackRenderer, title: "Ship tracks", blendMode: "lighter", popupEnabled: false }),
+    tracksFish: new FeatureLayer({ url: URL.tracksFish, renderer: trackRenderer, title: "Ship tracks (fishing, other)", blendMode: "lighter", popupEnabled: false }),
+    tracksTug: new FeatureLayer({ url: URL.tracksTug, renderer: trackRenderer, title: "Ship tracks (tug / service)", blendMode: "lighter", popupEnabled: false }),
+    tracksPleasure: new FeatureLayer({ url: URL.tracksPleasure, renderer: trackRenderer, title: "Ship tracks (pleasure)", blendMode: "lighter", popupEnabled: false }),
     ports: new FeatureLayer({
       url: URL.ports, title: "Major ports", outFields: ["*"],
       renderer: new SimpleRenderer({ symbol: { type: "simple-marker", style: "diamond", color: [4, 18, 42, 0.9], size: 11, outline: { color: [127, 227, 255, 1], width: 1.6 } } }),
@@ -237,7 +245,7 @@ require([
   // The hosted services carry minimum scales (density 1:22.8M, dark 1:17M, ports 1:54.7M) that hide data when zoomed out.
   Object.values(layers).forEach((l) => { l.minScale = 0; l.maxScale = 0; });
   const cmpLayer = new GraphicsLayer({ visible: false, title: "Compare" });
-  const map = new Map({ basemap: "streets-night-vector", layers: [layers.density, layers.tracks, cmpLayer, layers.dark, layers.jumps, layers.off, layers.ports] });
+  const map = new Map({ basemap: "streets-night-vector", layers: [layers.density, layers.tracksPleasure, layers.tracksFish, layers.tracksTug, layers.tracks, cmpLayer, layers.dark, layers.jumps, layers.off, layers.ports] });
   const view = new MapView({ container: "view", map, center: [134, -27], zoom: 4, constraints: { minZoom: 2 }, popup: { dockEnabled: false, collapseEnabled: false } });
   view.ui.components = ["attribution"];
   view.ui.add(new Zoom({ view }), "top-right");
@@ -299,7 +307,7 @@ require([
     const my = ++seq, w = wheres(), c = clsInfo();
     for (const k of Object.keys(w)) layers[k].definitionExpression = w[k];
     layers.density.renderer = cells(hex(c[2]));
-    layers.tracks.definitionExpression = and(`month = '${cur().d}'`, clsWhere("tracks")); applyTracks();
+    applyTracks();
     document.documentElement.style.setProperty("--clr", c[2]);
     document.querySelectorAll("#classes button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.c === state.cls));
     updateClock(); updateBadge(); buildCmp();
@@ -316,10 +324,16 @@ require([
 
   // Ship tracks are built for the complete (not truncated) months only, so they follow the dial when one is available.
   const TRACK_MONTHS = ["2024-01-01", "2024-02-01", "2024-03-01", "2024-04-01", "2024-05-01", "2024-06-01", "2024-07-01", "2024-10-01", "2025-02-01", "2026-06-01", "2026-07-01", "2026-08-01", "2026-09-01"];
+  // One track layer per size limit of the upload; each holds a fixed set of classes.
+  const TRACK_LAYERS = [["tracks", ["cargo", "tanker", "passenger"]], ["tracksFish", ["fishing", "other"]], ["tracksTug", ["tug/service"]], ["tracksPleasure", ["pleasure"]]];
   function applyTracks() {
-    const has = TRACK_MONTHS.includes(cur().d), on = $("l-trk").checked && has;
-    layers.tracks.visible = on;
-    $("trkNote").textContent = has ? "Large cargo, tanker and passenger ships for this month." : "Tracks exist for 13 complete months. This month was truncated at the source, so only density is shown.";
+    const d = cur().d, has = TRACK_MONTHS.includes(d), c = state.cls, show = $("l-trk").checked && has;
+    TRACK_LAYERS.forEach(([k, cls]) => {
+      const mine = c === "all" ? cls : cls.filter((x) => x === c), L = layers[k];
+      L.visible = show && mine.length > 0;
+      if (mine.length) L.definitionExpression = `month = '${d}'` + (c === "all" ? "" : ` AND vclass IN ('${mine.join("','")}')`);
+    });
+    $("trkNote").textContent = has ? "Tracks of every vessel class for this month. Large ships are 80 m and over." : "Tracks exist for 13 complete months. This month was truncated at the source, so only density is shown.";
   }
   function updateBadge() {
     const m = cur(), n = [];
