@@ -295,7 +295,6 @@ require([
     });
     cmpLayer.removeAll(); cmpLayer.addMany(gs);
     const notes = [];
-    if ((A >= "2026-06-01") !== (B >= "2026-06-01")) notes.push("From Jun 2026 AMSA's footprint changed (Coral Sea east of 158E is empty), so differences at the edges are not real change.");
     $("cmpNote").textContent = notes.join(" ");
   }
 
@@ -336,7 +335,6 @@ require([
   }
   function updateBadge() {
     const m = cur(), n = [];
-    if (m.d >= "2026-06-01") n.push("Since Jun 2026 AMSA's footprint changed (Coral Sea east of 158E is empty).");
     $("badge").textContent = n.join(" "); $("badge").hidden = !n.length;
   }
 
