@@ -295,7 +295,6 @@ require([
     });
     cmpLayer.removeAll(); cmpLayer.addMany(gs);
     const notes = [];
-    if (cur().capped || state.months[state.cmpB].capped) notes.push("One of these months is a partial AMSA file, so cell totals are biased low.");
     if ((A >= "2026-06-01") !== (B >= "2026-06-01")) notes.push("From Jun 2026 AMSA's footprint changed (Coral Sea east of 158E is empty), so differences at the edges are not real change.");
     $("cmpNote").textContent = notes.join(" ");
   }
@@ -333,7 +332,7 @@ require([
       L.visible = show && mine.length > 0;
       if (mine.length) L.definitionExpression = `month = '${d}'` + (c === "all" ? "" : ` AND vclass IN ('${mine.join("','")}')`);
     });
-    $("trkNote").textContent = "Tracks of every vessel class for this month. Large ships are 80 m and over." + (cur().capped ? " AMSA's file for this month was cut at 2 GiB, so there are fewer reports." : "");
+    $("trkNote").textContent = "Tracks of every vessel class for this month. Large ships are 80 m and over.";
   }
   function updateBadge() {
     const m = cur(), n = [];
@@ -397,7 +396,7 @@ require([
     const jul = state.months.findIndex((m) => m.d === "2026-07-01");
     state.mi = jul >= 0 ? jul : state.months.length - 1;   // start on Jul 2026, the month that has ship tracks
     $("scrub").max = state.months.length - 1;
-    state.months.forEach((m, i) => { const o = document.createElement("option"); o.value = i; o.textContent = lbl(m.d) + (m.capped ? " (partial)" : ""); $("cmpB").appendChild(o); });
+    state.months.forEach((m, i) => { const o = document.createElement("option"); o.value = i; o.textContent = lbl(m.d); $("cmpB").appendChild(o); });
     state.cmpB = Math.max(0, state.months.findIndex((m) => m.d === "2024-06-01")); $("cmpB").value = state.cmpB;
     ["dark", "jumps", "off"].forEach((k) => layers[k].queryFeatureCount({ where: "1=1" }).then((n) => { totals[k === "jumps" ? "jump" : k] = n; refresh(); }));
     refresh();
