@@ -26,7 +26,9 @@ html, body { height: 100%; margin: 0; padding: 0; background: var(--ocean-1); co
 
 /* Esri widgets restyled to match */
 .esri-widget, .esri-widget--button { background-color: var(--panel); color: var(--ink); }
-.esri-ui-top-right { top: 14px; right: 16px; }
+/* zoom/home sit above the title on the left; the basemap toggle sits above the class list on the right */
+.esri-ui-bottom-left { bottom: 230px; left: 16px; }
+.esri-ui-bottom-right { bottom: 340px; right: 24px; }
 .esri-ui .esri-widget--button { width: 40px; height: 40px; border: 1px solid var(--panel-edge); }
 .esri-view-width-xsmall .esri-ui .esri-widget--button { width: 36px; height: 36px; }
 .esri-popup__main-container { background: rgba(4,18,42,.96); border: 1px solid var(--panel-edge); }
@@ -71,7 +73,7 @@ html, body { height: 100%; margin: 0; padding: 0; background: var(--ocean-1); co
 
 /* "This month" cards, larger than before, top right beside the Esri widgets */
 #tint { position: fixed; inset: 0; background: #0a3c80; mix-blend-mode: soft-light; opacity: .75; pointer-events: none; z-index: 1; }
-#month { position: fixed; top: 14px; right: 130px; width: 380px; z-index: 5; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px; backdrop-filter: blur(6px); padding: 14px 16px 16px; }
+#month { position: fixed; top: 14px; right: 16px; width: 380px; z-index: 5; background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px; backdrop-filter: blur(6px); padding: 14px 16px 16px; }
 #month h2 { margin: 0 0 10px; font: 400 .8rem Montserrat, sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-dim); }
 #month .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 #month .card { border: 1px solid var(--panel-edge); border-radius: 8px; padding: 12px 14px; background: rgba(10,42,82,.35); }
@@ -96,7 +98,8 @@ td.hot { color: var(--jump); font-weight: 600; }
 
 @media (max-width: 900px) {
   #title { display: none; }
-  #month { right: 120px; width: min(330px, calc(100vw - 140px)); top: 64px; } #month .card b { font-size: 1.6rem; }
+  .esri-ui-bottom-left, .esri-ui-bottom-right { bottom: 190px; }
+  #month { right: 16px; width: min(330px, calc(100vw - 32px)); top: 64px; } #month .card b { font-size: 1.6rem; }
   #layers { width: 250px; } #badge { top: auto; bottom: 150px; max-width: 86vw; }
   #classes { flex-direction: row; flex-wrap: wrap; left: 0; right: 0; bottom: 120px; margin: 0; border-left: 0; padding: 0 16px; gap: 2px 14px; }
   #classes button { font-size: .8rem; } #classes button::before { display: none; }
@@ -249,9 +252,9 @@ require([
   const map = new Map({ basemap: "streets-night-vector", layers: [layers.density, layers.tracksPleasure, layers.tracksFish, layers.tracksTug, layers.tracks, cmpLayer, layers.dark, layers.jumps, layers.off, layers.ports] });
   const view = new MapView({ container: "view", map, center: [134, -27], zoom: 4, constraints: { minZoom: 2 }, popup: { dockEnabled: false, collapseEnabled: false } });
   view.ui.components = ["attribution"];
-  view.ui.add(new Zoom({ view }), "top-right");
-  view.ui.add(new Home({ view }), "top-right");
-  view.ui.add(new BasemapToggle({ view, nextBasemap: "satellite" }), "top-right");
+  view.ui.add(new Zoom({ view }), "bottom-left");
+  view.ui.add(new Home({ view }), "bottom-left");
+  view.ui.add(new BasemapToggle({ view, nextBasemap: "satellite" }), "bottom-right");
 
   // ---- filters ----
   const rangeW = (f, d) => `${f} >= timestamp '${d} 00:00:00' AND ${f} < timestamp '${nextMonth(d)} 00:00:00'`;
