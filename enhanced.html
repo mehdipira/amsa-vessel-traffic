@@ -337,7 +337,6 @@ require([
   }
   function updateBadge() {
     const m = cur(), n = [];
-    if (m.capped) n.push("AMSA's file for this month hit the 2 GiB DBF limit, so counts are partial.");
     if (m.d >= "2026-06-01") n.push("Since Jun 2026 AMSA's footprint changed (Coral Sea east of 158E is empty).");
     $("badge").textContent = n.join(" "); $("badge").hidden = !n.length;
   }
