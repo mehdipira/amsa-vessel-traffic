@@ -27,7 +27,9 @@ html, body { height: 100%; margin: 0; padding: 0; background: var(--ocean-1); co
 /* Esri widgets restyled to match */
 .esri-widget, .esri-widget--button { background-color: var(--panel); color: var(--ink); }
 /* zoom/home sit above the title on the left; the basemap toggle sits above the class list on the right */
-.esri-ui-bottom-left { bottom: 198px; left: 0; }
+.esri-ui-bottom-left { bottom: 193px; left: 0; flex-direction: column; align-items: flex-start; }
+.esri-ui-bottom-left .esri-component { margin: 0 !important; }
+.esri-ui .esri-ui-bottom-left .esri-widget--button { width: 30px; height: 30px; }
 .esri-ui-bottom-right { bottom: 340px; right: 24px; }
 .esri-ui .esri-widget--button { width: 40px; height: 40px; border: 1px solid var(--panel-edge); }
 .esri-view-width-xsmall .esri-ui .esri-widget--button { width: 36px; height: 36px; }
